@@ -1,0 +1,32 @@
+# Copy to elco.properties and fill in your Remocon-NET login.
+# (alternatively set the environment variables ELCO_EMAIL / ELCO_PASSWORD)
+email=you@example.com
+password=change-me
+
+# Gateways (from /api/v2/remote/plants/lite)
+# "elco sx 10": all temperatures, flow, heat output
+gateway.bsb=YOUR_BSB_GATEWAY_ID
+# "strom": electricity consumption in 2 h blocks (fetched on the first poll after each even hour)
+gateway.strom=YOUR_STROM_GATEWAY_ID
+power.enabled=true
+
+# Output folder for the daily CSV files
+outputDir=data
+
+# Poll interval while the compressor (BSB 8400) is on / off
+interval.hpOn.seconds=115
+interval.hpOff.seconds=600
+
+# Pause between single HTTP requests (keeps us below the Remocon rate limit)
+requestSpacing.ms=3000
+# Wait time after "429 Requests are blocked"
+rateLimitWait.seconds=120
+
+# CSV delimiter: ","  (use ";" for Excel with German/Swiss locale)
+csv.delimiter=,
+
+# Dashboard (same JVM). Open http://localhost:8083/ in a browser.
+# web.bind=127.0.0.1 → only this Mac; set 0.0.0.0 to reach it from other devices in your network (no login!)
+web.enabled=true
+web.bind=127.0.0.1
+web.port=8083

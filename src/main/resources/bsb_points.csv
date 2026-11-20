@@ -1,0 +1,15 @@
+address,line,column,name,unit,tier,scale,type
+328993,8700,outdoor_temp_c,Outside temperature,C,live,1,number
+2950430,8740,indoor_temp_c,Room temperature 1,C,live,1,number
+3212591,8830,hot_water_temp_c,DHW temperature,C,live,1,number
+5834029,8412,flow_temp_c,Heat pump flow temperature,C,live,1,number
+5834599,8411,flow_setpoint_c,Heat pump flow setpoint,C,live,1,number
+5834039,8410,return_temp_c,Heat pump return temperature,C,live,1,number
+5834977,8475,evaporator_temp_c,Evaporator temperature,C,live,1,number
+334189,8434,suction_gas_temp_c,Suction gas temperature,C,live,1,number
+5834175,8415,hot_gas_temp_c,Hot gas temperature,C,live,1,number
+5834184,8420,liquid_temp_c,Refrigerant liquid temperature,C,live,1,number
+331050,8413,compressor_modulation_pct,Compressor modulation,%,live,1,number
+332559,8460,flow_rate_l_min,Heat pump water flow rate,l/min,live,1,number
+334296,8395,heat_output_kw,Heat output,kW,live,1,number
+330165,8400,hp_on,Compressor 1 on,,live,1,number

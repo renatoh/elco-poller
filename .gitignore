@@ -1,0 +1,12 @@
+target/
+data/
+elco.properties
+*.iml
+.idea/
+poller.log
+poller.pid
+*.jar
+*.jar.new
+/elco_*.csv
+_to_delete/
+.DS_Store

@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heat pump</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f4f3f0;
+    --surface-1: #fcfcfb;
+    --border: #e4e2dc;
+    --grid: #ecebe6;
+    --axis: #b9b7ae;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #7a7974;
+    --c-dhw: #eda100;      /* amber   - hot water */
+    --c-in: #008300;       /* green   - indoor */
+    --c-out: #8a8983;      /* neutral - outdoor */
+    --c-flow-on: #e34948;  /* red     - flow, heat pump on */
+    --c-flow-off: #2a78d6; /* blue    - flow, heat pump off */
+    --c-heat: #6250d6;     /* violet  - heat produced (energy chart) */
+    --c-elec: #e87ba4;     /* magenta - electricity used (energy chart) */
+    --on: #52514e;
+    --good: #0ca30c;
+    --good-text: #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #111110;
+      --surface-1: #1a1a19;
+      --border: #2e2e2b;
+      --grid: #262624;
+      --axis: #55544f;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8e86;
+      --c-dhw: #c98500;
+      --c-in: #0ca30c;
+      --c-out: #9d9c94;
+      --c-flow-on: #e66767;
+      --c-flow-off: #3987e5;
+      --c-heat: #9085e9;
+      --c-elec: #d55181;
+      --on: #c3c2b7;
+      --good: #0ca30c;
+      --good-text: #0ca30c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--surface-0); color: var(--text-primary);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px;
+    padding: 12px 20px; background: var(--surface-1); border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  h2 { font-size: 14px; margin: 0; font-weight: 600; }
+  .datenav { display: flex; align-items: center; gap: 6px; }
+  .datenav button, .datenav input {
+    font: inherit; color: var(--text-primary); background: var(--surface-0);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  }
+  .datenav button:disabled { opacity: .4; cursor: default; }
+  .datenav button.active { border-color: var(--text-secondary); }
+  #updated { margin-left: auto; color: var(--text-muted); font-size: 12px; }
+  main { max-width: none; margin: 0 auto; padding: 16px 24px 40px; display: grid; gap: 16px; }
+  .now { display: grid; gap: 12px; }
+  .now-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .now-head .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .now-head .big small { font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 3px; }
+  .now-head .when { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .now-head .warn { color: var(--text-muted); font-size: 12px; }
+  .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px 16px; margin: 0; }
+  .kv div { min-width: 0; }
+  .kv dt { color: var(--text-secondary); font-size: 12px; }
+  .kv dd { margin: 1px 0 0; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kv dd small { font-size: 12px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+  .kv dd .sub { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); white-space: normal; }
+  .kv dd .mm { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-left: 4px; }
+  .now-head .cop { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .now-head .cop b { color: var(--text-primary); font-size: 18px; }
+  .state { display: inline-flex; align-items: center; gap: 7px; font-size: 18px; font-weight: 600; }
+  .state i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 2px solid var(--text-muted); }
+  .state.on { color: var(--good-text); }
+  .state.on i { background: var(--good); border-color: var(--good); }
+  .cycle-body { display: grid; gap: 12px; }
+  @media (min-width: 1100px) { .cycle-body { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); align-items: center; } }
+  #cycle svg { display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto; }
+  .cycle .pick { cursor: pointer; }
+  .cycle .pick rect { fill: transparent; }
+  .cycle .pick:hover rect { fill: var(--grid); }
+  .cycle .pick.sel rect { fill: var(--grid); stroke: var(--axis); }
+  .cycle .hint { color: var(--text-muted); text-align: center; padding: 24px 0; }
+  .cycle .sub-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 4px; }
+  .cycle .sub-head .meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .cycle .sub-head button { margin-left: auto; font: inherit; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+  .cycle .pipe { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+  .cycle .hot { stroke: var(--c-flow-on); }
+  .cycle .cold { stroke: var(--c-flow-off); }
+  .cycle .hotf { fill: var(--c-flow-on); }
+  .cycle .coldf { fill: var(--c-flow-off); }
+  .cycle.off .hot, .cycle.off .cold { stroke: var(--axis); }
+  .cycle.off .hotf, .cycle.off .coldf { fill: var(--axis); }
+  .cycle .part { fill: var(--surface-0); stroke: var(--text-secondary); stroke-width: 1.5; }
+  .cycle .fin { stroke: var(--axis); stroke-width: 1; fill: none; }
+  .cycle .air { stroke: var(--axis); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .cycle .nm { font-size: 14px; fill: var(--text-secondary); }
+  .cycle .val { font-size: 19px; font-weight: 600; fill: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .cycle .unit { font-size: 13px; font-weight: 400; fill: var(--text-secondary); }
+  .cycle .comp { font-size: 13px; fill: var(--text-muted); }
+  @media (max-width: 600px) {
+    header { padding: 10px 14px; gap: 8px 12px; }
+    main { padding: 12px 10px 32px; gap: 12px; }
+    .card { padding: 12px; }
+    .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #updated { width: 100%; margin-left: 0; }
+    .datenav { flex: 1; }
+    .datenav input { flex: 1; min-width: 0; }
+  }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 8px; }
+  .card-head .meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-secondary); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend b { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; overflow: visible; touch-action: pan-y; }
+  .chart text { font-size: 11px; fill: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .chart .lbl { fill: var(--text-secondary); font-size: 12px; }
+  .empty { color: var(--text-muted); padding: 30px 0; text-align: center; }
+  .tip {
+    position: fixed; z-index: 5; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.12); font-variant-numeric: tabular-nums; min-width: 150px;
+  }
+  .tip .t { font-weight: 600; margin-bottom: 4px; }
+  .tip .r { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  .tip .r span { display: inline-flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+  .tip .r b { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .tablewrap { overflow: auto; max-height: 480px; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 500; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Heat pump</h1>
+  <nav class="datenav" aria-label="Choose day">
+    <button id="prev" title="Previous day" aria-label="Previous day">‹</button>
+    <input type="date" id="date" aria-label="Day">
+    <button id="next" title="Next day" aria-label="Next day">›</button>
+    <button id="today">Today</button>
+  </nav>
+  <span id="updated"></span>
+</header>
+<main>
+  <section class="card now" id="now" aria-live="polite"></section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Temperatures °C</h2>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div id="tempChart" class="chart"></div>
+  </section>
+
+  <section class="card cycle" id="cycleCard">
+    <div class="card-head"><h2>Refrigerant cycle</h2><span class="meta" id="cycleWhen"></span></div>
+    <div class="cycle-body">
+      <div id="cycle"></div>
+      <div id="cycleChart"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Heat and electricity per 2 h, kWh</h2>
+      <div class="legend"><span><b style="background:var(--c-heat);height:8px"></b>Heat produced</span><span><b style="background:var(--c-elec);height:8px"></b>Electricity used</span><span>COP above the bars</span></div>
+      <span class="meta" id="kwhTotal"></span>
+    </div>
+    <div id="kwhChart" class="chart"></div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>All readings (<span id="count">0</span>)</summary>
+      <div class="tablewrap"><table id="table"></table></div>
+    </details>
+  </section>
+</main>
+<div id="tip" class="tip" hidden></div>
+
+<script>
+"use strict";
+// Flow is coloured by heat pump state: red while on, blue while off.
+const FLOW_ON = "var(--c-flow-on)", FLOW_OFF = "var(--c-flow-off)";
+const SERIES = [
+  { key: "hot_water_temp_c", label: "Hot water", color: "var(--c-dhw)" },
+  { key: "flow_temp_c",      label: "Flow",      color: FLOW_ON, byState: true },
+  { key: "indoor_temp_c",    label: "Indoor",    color: "var(--c-in)" },
+  { key: "outdoor_temp_c",   label: "Outdoor",   color: "var(--c-out)" },
+];
+const isOn = r => num(r.hp_on) === 1;
+const colorAt = (s, r) => s.byState ? (isOn(r) ? FLOW_ON : FLOW_OFF) : s.color;
+const GAP_MIN = 20;          // break lines / on-strip across gaps longer than this (minutes)
+const REFRESH_MS = 60000;
+
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+let followToday = true, shownDate = null, today = null, rows = [], power = [];
+let cycleSel = null;   // temperature picked in the refrigerant diagram
+const CYCLE_POINTS = {
+  outdoor_temp_c: "Outdoor air", evaporator_temp_c: "Evaporator", suction_gas_temp_c: "Suction gas",
+  hot_gas_temp_c: "Hot gas", liquid_temp_c: "Liquid", flow_temp_c: "Flow", return_temp_c: "Return",
+  compressor_modulation_pct: "Compressor",
+};
+const unitOf = key => key.endsWith("_pct") ? "%" : "°C";
+
+// ---------- data ----------
+function num(v) { if (v === undefined || v === null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
+function minuteOf(ts) { const h = +ts.slice(11, 13), m = +ts.slice(14, 16), s = +ts.slice(17, 19) || 0; return h * 60 + m + s / 60; }
+function hhmm(min) { const h = Math.floor(min / 60), m = Math.floor(min % 60); return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); }
+function fmt(v, d = 1) { return v === null ? "–" : v.toFixed(d); }
+function addDays(iso, n) { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+
+async function load() {
+  const q = followToday ? "" : "?date=" + shownDate;
+  try {
+    const res = await fetch("/api/day" + q, { cache: "no-store" });
+    const j = await res.json();
+    today = j.today; shownDate = j.date;
+    rows = j.rows.filter(r => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(r.timestamp || ""))
+                 .map(r => ({ ...r, t: minuteOf(r.timestamp) }));
+    power = (j.power || []).map(p => ({ start: minuteOf(p.slot_start + ":00"), kwh: num(p.electricity_kwh) }))
+                           .filter(p => p.kwh !== null);
+    render();
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    $("updated").textContent = "Cannot reach the poller";
+  }
+}
+
+// ---------- navigation ----------
+function go(date) {
+  followToday = !date || date >= today;
+  shownDate = followToday ? today : date;
+  load();
+}
+$("prev").onclick = () => go(addDays(shownDate, -1));
+$("next").onclick = () => go(addDays(shownDate, 1));
+$("today").onclick = () => go(null);
+$("date").onchange = e => e.target.value && go(e.target.value);
+setInterval(() => { if (followToday) load(); }, REFRESH_MS);
+window.addEventListener("resize", () => { clearTimeout(window.__rs); window.__rs = setTimeout(renderCharts, 120); });
+
+// ---------- render ----------
+function render() {
+  $("date").value = shownDate; $("date").max = today;
+  $("next").disabled = shownDate >= today;
+  $("today").classList.toggle("active", followToday);
+  renderNow(); renderCharts(); renderCycle(); renderTable();
+}
+
+// newest reading that actually has data (a failed poll writes a row with empty values)
+function latestRow() {
+  return [...rows].reverse().find(x => num(x.hp_on) !== null || num(x.flow_temp_c) !== null) || rows[rows.length - 1];
+}
+
+// Schematic of the refrigerant circuit with the latest temperatures.
+// Red = high-pressure side (and water flow), blue = low-pressure side (and water return); grey while the heat pump is off.
+function renderCycle() {
+  const card = $("cycleCard"), r = rows.length ? latestRow() : null;
+  const on = r ? num(r.hp_on) === 1 : false;
+  card.classList.toggle("off", !on);
+  $("cycleWhen").textContent = r ? "at " + r.timestamp.slice(11, 16) + (on ? "" : " · heat pump off") : "";
+  const v = k => r ? fmt(num(r[k])) : "–";
+  const lab = (x, y, anchor, key) => {
+    const name = CYCLE_POINTS[key], val = key.endsWith("_pct") ? fmt(num(r && r[key]), 0) : v(key), w = 92, bx = anchor === "start" ? x - 6 : x - w / 2;
+    return '<g class="pick' + (key === cycleSel ? " sel" : "") + '" data-key="' + key + '" role="button" tabindex="0" aria-label="Show ' + name + ' over the day">' +
+      '<rect x="' + bx + '" y="' + (y - 16) + '" width="' + w + '" height="44" rx="6"/>' +
+      '<text x="' + x + '" y="' + y + '" text-anchor="' + anchor + '" class="nm">' + name + "</text>" +
+      '<text x="' + x + '" y="' + (y + 21) + '" text-anchor="' + anchor + '" class="val">' + val +
+      (val !== "–" ? '<tspan class="unit"> ' + unitOf(key) + "</tspan>" : "") + "</text></g>";
+  };
+  // arrowhead pointing in direction d (r, l, u, d) at x,y
+  const arr = (x, y, d, cls) => {
+    const p = { r: [[-6, -6], [4, 0], [-6, 6]], l: [[6, -6], [-4, 0], [6, 6]], u: [[-6, 6], [0, -4], [6, 6]], d: [[-6, -6], [0, 4], [6, -6]] }[d];
+    return '<path class="' + cls + '" d="M' + p.map(q => (x + q[0]) + " " + (y + q[1])).join(" L") + 'Z"/>';
+  };
+  let fins = "", zig = "380 80";
+  for (let y = 90; y <= 210; y += 10) fins += '<line class="fin" x1="80" x2="124" y1="' + y + '" y2="' + y + '"/>';
+  for (let y = 92, i = 0; y <= 212; y += 12, i++) zig += " " + (i % 2 ? 396 : 364) + " " + y;
+  zig += " 380 220";
+  $("cycle").innerHTML =
+    '<svg viewBox="0 0 520 300" role="img" aria-label="Refrigerant cycle with current temperatures">' +
+    // pipes: low pressure (blue) and high pressure (red)
+    '<path class="pipe cold" d="M102 80 V60 H218"/>' + arr(140, 60, "r", "coldf") +
+    '<path class="pipe hot" d="M262 60 H380 V80"/>' + arr(300, 60, "r", "hotf") +
+    '<path class="pipe hot" d="M380 220 V244 H252"/>' + arr(290, 244, "l", "hotf") +
+    '<path class="pipe cold" d="M228 244 H102 V220"/>' + arr(170, 244, "l", "coldf") +
+    // water side
+    '<path class="pipe hot" d="M402 104 H496"/>' + arr(498, 104, "r", "hotf") +
+    '<path class="pipe cold" d="M500 196 H408"/>' + arr(406, 196, "l", "coldf") +
+    // outdoor air through the coil
+    [130, 150, 170].map(y => '<path class="air" d="M22 ' + y + ' H66 M60 ' + (y - 5) + ' L67 ' + y + ' L60 ' + (y + 5) + '"/>').join("") +
+    // components
+    '<rect class="part" x="80" y="80" width="44" height="140" rx="3"/>' + fins +
+    '<circle class="part" cx="240" cy="60" r="22"/><path class="fin" style="stroke:var(--text-secondary)" d="M225 44 L261 53 M225 76 L261 67"/>' +
+    '<rect class="part" x="358" y="80" width="44" height="140" rx="3"/><polyline class="fin" style="stroke:var(--text-secondary)" points="' + zig + '"/>' +
+    '<path class="part" d="M228 234 L252 254 L252 234 L228 254 Z"/>' +
+    '<text x="346" y="154" text-anchor="end" class="comp">Condenser</text>' +
+    '<text x="240" y="224" text-anchor="middle" class="comp">Expansion valve</text>' +
+    // temperatures
+    lab(40, 64, "middle", "outdoor_temp_c") +
+    lab(136, 140, "start", "evaporator_temp_c") +
+    lab(160, 25, "middle", "suction_gas_temp_c") +
+    lab(321, 25, "middle", "hot_gas_temp_c") +
+    lab(316, 266, "middle", "liquid_temp_c") +
+    lab(452, 72, "middle", "flow_temp_c") +
+    lab(452, 220, "middle", "return_temp_c") +
+    lab(240, 99, "middle", "compressor_modulation_pct") +
+    "</svg>";
+  $("cycle").querySelectorAll(".pick").forEach(g => {
+    const pick = () => selectCycle(g.dataset.key === cycleSel ? null : g.dataset.key);
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+}
+
+function selectCycle(key) {
+  cycleSel = key;
+  $("cycle").querySelectorAll(".pick").forEach(g => g.classList.toggle("sel", g.dataset.key === key));
+  renderCycleChart();
+}
+
+// Day curve of the temperature picked in the diagram; red while the heat pump runs, blue while it is off.
+function renderCycleChart() {
+  const box = $("cycleChart"); box.innerHTML = "";
+  if (!cycleSel) { box.innerHTML = '<div class="hint">Click a value in the diagram to see its curve for the day.</div>'; return; }
+  const key = cycleSel, name = CYCLE_POINTS[key], unit = unitOf(key), s = { key, byState: true };
+  const pts = rows.filter(r => num(r[key]) !== null);
+  const vals = pts.map(r => num(r[key]));
+  const head = document.createElement("div"); head.className = "sub-head";
+  head.innerHTML = "<h2>" + name + (unit === "%" ? " speed %" : " °C") + "</h2>" +
+    '<div class="legend"><span><b style="background:' + FLOW_ON + '"></b>heat pump on</span><span><b style="background:' + FLOW_OFF + '"></b>heat pump off</span></div>' +
+    (vals.length ? '<span class="meta">' + Math.min(...vals).toFixed(unit === "%" ? 0 : 1) + " – " + Math.max(...vals).toFixed(unit === "%" ? 0 : 1) + " " + unit + "</span>" : "") +
+    '<button type="button" aria-label="Close">×</button>';
+  head.querySelector("button").onclick = () => selectCycle(null);
+  box.appendChild(head);
+  const cbox = document.createElement("div"); cbox.className = "chart"; box.appendChild(cbox);
+  if (!pts.length) { cbox.innerHTML = '<div class="empty">No ' + name.toLowerCase() + " readings for this day.</div>"; return; }
+  const W = cbox.clientWidth, narrow = W < 520;
+  const H = narrow ? 200 : 260, m = { l: 34, r: 12, t: 10, b: 24 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ticks = unit === "%" ? [0, 25, 50, 75, 100] : niceTicks(Math.min(...vals), Math.max(...vals), 5);
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const x = t => m.l + (t / 1440) * pw, y = v => m.t + ph - ((v - y0) / ((y1 - y0) || 1)) * ph;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": name + " over the day" }, cbox);
+  for (const v of ticks) {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    const t = el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg); t.textContent = v;
+  }
+  el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  xAxis(svg, x, m.t + ph);
+  // one path per run of equal state; a segment takes the colour of the state at its start
+  let prev = null, cur = null;
+  for (const r of pts) {
+    const px = x(r.t).toFixed(1) + "," + y(num(r[key])).toFixed(1);
+    if (!prev || r.t - prev.r.t > GAP_MIN) cur = el("path", { d: "M" + px, stroke: colorAt(s, r) }, svg);
+    else if (colorAt(s, prev.r) !== cur.getAttribute("stroke")) cur = el("path", { d: "M" + prev.px + "L" + px, stroke: colorAt(s, prev.r) }, svg);
+    else cur.setAttribute("d", cur.getAttribute("d") + "L" + px);
+    if (prev && r.t - prev.r.t <= GAP_MIN && colorAt(s, r) !== cur.getAttribute("stroke")) cur = el("path", { d: "M" + px, stroke: colorAt(s, r) }, svg);
+    prev = { r, px };
+  }
+  svg.querySelectorAll("path").forEach(p => { p.setAttribute("fill", "none"); p.setAttribute("stroke-width", 2); p.setAttribute("stroke-linejoin", "round"); p.setAttribute("stroke-linecap", "round"); });
+  // crosshair + tooltip
+  const cross = el("line", { y1: m.t, y2: m.t + ph, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const dot = el("circle", { r: 4, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg);
+  const hit = el("rect", { x: m.l, y: m.t, width: pw, height: ph + 20, fill: "transparent" }, svg);
+  const hide = () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); $("tip").hidden = true; };
+  hit.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") hide(); });
+  const onMove = ev => {
+    const rect = svg.getBoundingClientRect();
+    const t = (((ev.clientX - rect.left) * (W / rect.width) - m.l) / pw) * 1440;
+    if (t < 0 || t > 1440) { hide(); return; }
+    let best = pts[0];
+    for (const r of pts) if (Math.abs(r.t - t) < Math.abs(best.t - t)) best = r;
+    if (Math.abs(best.t - t) > GAP_MIN) {
+      cross.setAttribute("x1", x(t)); cross.setAttribute("x2", x(t)); cross.setAttribute("visibility", "visible"); dot.setAttribute("visibility", "hidden");
+      showTip(ev, '<div class="t">' + hhmm(t) + '</div><div class="r"><span>No reading at this time</span></div>');
+      return;
+    }
+    const v = num(best[key]);
+    cross.setAttribute("x1", x(best.t)); cross.setAttribute("x2", x(best.t)); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(best.t)); dot.setAttribute("cy", y(v)); dot.setAttribute("fill", colorAt(s, best)); dot.setAttribute("visibility", "visible");
+    showTip(ev, '<div class="t">' + best.timestamp.slice(11, 16) + " · heat pump " + (num(best.hp_on) === 1 ? "on" : "off") + "</div>" +
+      '<div class="r"><span><b style="background:' + colorAt(s, best) + '"></b>' + name + "</span>" + v.toFixed(unit === "%" ? 0 : 1) + " " + unit + "</div>");
+  };
+  hit.addEventListener("pointermove", onMove);
+  hit.addEventListener("pointerdown", onMove);
+}
+
+
+// heat per 2h slot from the readings; coverage = share of the slot covered by integrated intervals
+function energySlots() {
+  const slots = Array.from({ length: 12 }, (_, i) => ({ start: i * 120, heat: 0, covered: 0, elec: null, cop: null }));
+  for (let i = 1; i < rows.length; i++) {
+    const v = num(rows[i].heat_kwh_interval), dt = rows[i].t - rows[i - 1].t;
+    if (v === null) continue;
+    const s = slots[Math.min(11, Math.floor(rows[i].t / 120))];
+    s.heat += v;
+    if (dt > 0 && dt <= 15) s.covered += dt;
+  }
+  for (const p of power) { const i = Math.round(p.start / 120); if (i >= 0 && i < 12) slots[i].elec = p.kwh; }
+  for (const s of slots) {
+    s.complete = s.elec !== null && s.covered >= 108;          // ≥ 90 % of the 2 h measured
+    if (s.complete && s.elec >= 0.05) s.cop = s.heat / s.elec;
+  }
+  const done = slots.filter(s => s.complete);
+  const heat = done.reduce((a, s) => a + s.heat, 0), elec = done.reduce((a, s) => a + s.elec, 0);
+  return { slots, dayCop: elec >= 0.1 ? heat / elec : null, dayHeat: heat, dayElec: elec, nDone: done.length };
+}
+
+// min/max of a column over rows (optionally only rows after minute tFrom)
+function minMax(key, tFrom = -1) {
+  let lo = null, hi = null;
+  for (const r of rows) {
+    if (r.t < tFrom) continue;
+    const v = num(r[key]); if (v === null) continue;
+    lo = lo === null ? v : Math.min(lo, v); hi = hi === null ? v : Math.max(hi, v);
+  }
+  return lo === null ? "" : '<span class="mm">[' + lo.toFixed(1) + "–" + hi.toFixed(1) + "]</span>";
+}
+
+function renderNow() {
+  const box = $("now");
+  if (!rows.length) { box.innerHTML = '<div class="now-head"><span class="big">No data</span><span class="when">' + shownDate + "</span></div>"; return; }
+  // newest reading that actually has data (a failed poll writes a row with empty values)
+  const r = latestRow();
+  const hp = num(r.hp_on), on = hp === 1, isToday = shownDate === today;
+  const stale = isToday && (Date.now() - new Date(r.timestamp).getTime()) > 15 * 60000;
+  const kw = num(r.heat_output_kw);
+  // sum of the intervals over all of the day's files (robust against a total that restarted)
+  const ints = rows.map(x => num(x.heat_kwh_interval)).filter(v => v !== null);
+  const kwh = ints.length ? ints.reduce((a, v) => a + v, 0) : null;
+  const kv = (k, v, unit, sub, mm) => "<div><dt>" + k + "</dt><dd>" + v + (v !== "–" && unit ? "<small>" + unit + "</small>" : "") +
+    (mm || "") + (sub ? '<span class="sub">' + sub + "</span>" : "") + "</dd></div>";
+  const e = energySlots();
+  const setp = num(r.flow_setpoint_c);
+  box.innerHTML =
+    '<div class="now-head">' +
+      (hp === null ? '<span class="state">–</span>' : '<span class="state ' + (on ? "on" : "") + '"><i></i>' + (on ? "On" : "Off") + "</span>") +
+      '<span class="big">' + fmt(kw, 1) + (kw !== null ? "<small>kW</small>" : "") + "</span>" +
+      '<span class="when">at ' + r.timestamp.slice(11, 16) + "</span>" +
+      (stale ? '<span class="warn">no new data for a while</span>' : "") +
+      (e.dayCop !== null ? '<span class="cop">COP ' + (isToday ? "today" : "that day") + " <b>" + e.dayCop.toFixed(1) + "</b></span>" : "") +
+    "</div>" +
+    '<dl class="kv">' +
+      kv("Outdoor", fmt(num(r.outdoor_temp_c)), "°C", "", minMax("outdoor_temp_c")) +
+      kv("Indoor", fmt(num(r.indoor_temp_c)), "°C", "", minMax("indoor_temp_c")) +
+      kv("Hot water", fmt(num(r.hot_water_temp_c)), "°C", "", minMax("hot_water_temp_c")) +
+      kv("Flow", fmt(num(r.flow_temp_c)), "°C", (setp !== null ? "setpoint " + fmt(setp) + " °C · " : "") + "range last hour",
+         minMax("flow_temp_c", r.t - 60)) +
+      kv("Flow rate", fmt(num(r.flow_rate_l_min)), "l/min") +
+      kv("Heat " + (isToday ? "today" : "that day"), fmt(kwh, 1), "kWh") +
+      kv("Electricity " + (isToday ? "today" : "that day"), power.length ? fmt(power.reduce((a, p) => a + p.kwh, 0), 1) : "–", "kWh",
+         e.nDone ? "COP from " + e.nDone + " complete 2 h blocks" : "") +
+    "</dl>";
+}
+
+function renderCharts() {
+  renderLegend(); renderTempChart(); renderCycleChart(); renderKwhChart();
+}
+
+function renderLegend() {
+  $("legend").innerHTML = SERIES.map(s => s.byState
+      ? '<span><b style="background:' + FLOW_ON + '"></b>Flow, heat pump on</span><span><b style="background:' + FLOW_OFF + '"></b>Flow, heat pump off</span>'
+      : '<span><b style="background:' + s.color + '"></b>' + s.label + "</span>").join("") ;
+}
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function niceTicks(min, max, count) {
+  const span = max - min || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 5, 10].map(f => f * mag).find(s => span / s <= count) || 10 * mag;
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step, out = [];
+  for (let v = lo; v <= hi + step / 2; v += step) out.push(+v.toFixed(6));
+  return out;
+}
+
+function xAxis(svg, x, y0) {
+  const pw = x(1440) - x(0), step = pw < 260 ? 12 : pw < 520 ? 6 : 3;
+  for (let h = 0; h <= 24; h += step) {
+    const t = el("text", { x: x(h * 60), y: y0 + 16, "text-anchor": h === 0 ? "start" : h === 24 ? "end" : "middle" }, svg);
+    t.textContent = String(h).padStart(2, "0") + ":00";
+  }
+}
+
+function renderTempChart() {
+  const box = $("tempChart"); box.innerHTML = "";
+  if (!rows.length) { box.innerHTML = '<div class="empty">No readings for this day.</div>'; return; }
+  const W = box.clientWidth, narrow = W < 520;
+  const H = narrow ? 340 : 420, m = { l: 30, r: narrow ? 26 : 84, t: 10, b: 24 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const vals = rows.flatMap(r => SERIES.map(s => num(r[s.key]))).filter(v => v !== null);
+  const ticks = niceTicks(Math.min(...vals, 0), Math.max(...vals), 6);
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const x = t => m.l + (t / 1440) * pw, y = v => m.t + ph - ((v - y0) / (y1 - y0)) * ph;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Temperatures over the day" }, box);
+
+  for (const v of ticks) {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    const t = el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg); t.textContent = v;
+  }
+  el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+
+  xAxis(svg, x, m.t + ph);
+
+  // lines (break across gaps); state-coloured series are split where the state changes
+  const ends = [];
+  for (const s of SERIES) {
+    const pieces = [];           // {color, d}
+    let cur = null, prev = null, last = null;
+    for (const r of rows) {
+      const v = num(r[s.key]);
+      if (v === null) { prev = null; cur = null; continue; }
+      const px = x(r.t).toFixed(1) + "," + y(v).toFixed(1);
+      const gap = prev === null || r.t - prev.r.t > GAP_MIN;
+      // a segment prev→r takes the colour of the state at prev (state holds until the next reading)
+      const segColor = gap ? colorAt(s, r) : colorAt(s, prev.r);
+      if (gap) {
+        cur = { color: colorAt(s, r), d: "M" + px }; pieces.push(cur);
+      } else if (segColor !== cur.color) {
+        cur = { color: segColor, d: "M" + prev.px + "L" + px }; pieces.push(cur);
+      } else {
+        cur.d += "L" + px;
+      }
+      // after drawing to r, continue in r's colour
+      if (!gap && colorAt(s, r) !== cur.color) { cur = { color: colorAt(s, r), d: "M" + px }; pieces.push(cur); }
+      prev = { r, px }; last = { t: r.t, v, r };
+    }
+    for (const pc of pieces) {
+      el("path", { d: pc.d, fill: "none", stroke: pc.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, svg);
+    }
+    if (last) ends.push({ s, color: colorAt(s, last.r), y: y(last.v), x: x(last.t), v: last.v });
+  }
+  // direct labels at line ends, nudged apart
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14;
+  for (const e of narrow ? [] : ends) {
+    const lx = m.l + pw + 6;
+    el("line", { x1: lx, x2: lx + 8, y1: e.y, y2: e.y, stroke: e.color, "stroke-width": 3, "stroke-linecap": "round" }, svg);
+    const t = el("text", { x: lx + 12, y: e.y + 4, class: "lbl" }, svg); t.textContent = e.s.label;
+  }
+
+  // crosshair + tooltip
+  const cross = el("line", { y1: m.t, y2: m.t + ph, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const dots = SERIES.map(s => el("circle", { r: 4, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg));
+  const hit = el("rect", { x: m.l, y: m.t, width: pw, height: ph + 20, fill: "transparent" }, svg);
+  const hide = () => { cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); $("tip").hidden = true; };
+  hit.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") hide(); });
+  const onMove = ev => {
+    const rect = svg.getBoundingClientRect();
+    const mx = (ev.clientX - rect.left) * (W / rect.width);
+    const t = ((mx - m.l) / pw) * 1440;
+    let best = rows[0];
+    for (const r of rows) if (Math.abs(r.t - t) < Math.abs(best.t - t)) best = r;
+    if (t < 0 || t > 1440) { hide(); return; }
+    if (Math.abs(best.t - t) > GAP_MIN) {
+      cross.setAttribute("x1", x(t)); cross.setAttribute("x2", x(t)); cross.setAttribute("visibility", "visible");
+      dots.forEach(d => d.setAttribute("visibility", "hidden"));
+      showTip(ev, '<div class="t">' + hhmm(t) + '</div><div class="r"><span>No reading at this time</span></div>');
+      return;
+    }
+    cross.setAttribute("x1", x(best.t)); cross.setAttribute("x2", x(best.t)); cross.setAttribute("visibility", "visible");
+    SERIES.forEach((s, i) => {
+      const v = num(best[s.key]);
+      if (v === null) { dots[i].setAttribute("visibility", "hidden"); return; }
+      dots[i].setAttribute("cx", x(best.t)); dots[i].setAttribute("cy", y(v)); dots[i].setAttribute("fill", colorAt(s, best)); dots[i].setAttribute("visibility", "visible");
+    });
+    const on = num(best.hp_on) === 1;
+    showTip(ev, '<div class="t">' + best.timestamp.slice(11, 16) + " · heat pump " + (on ? "on" : "off") + "</div>" +
+      SERIES.map(s => '<div class="r"><span><b style="background:' + colorAt(s, best) + '"></b>' + s.label + "</span>" + fmt(num(best[s.key])) + " °C</div>").join(""));
+  };
+  hit.addEventListener("pointermove", onMove);
+  hit.addEventListener("pointerdown", onMove);
+}
+
+function renderKwhChart() {
+  const box = $("kwhChart"); box.innerHTML = "";
+  const e = energySlots();
+  const anyHeat = e.slots.some(x => x.heat > 0), anyElec = e.slots.some(x => x.elec !== null);
+  $("kwhTotal").textContent = (e.dayCop !== null ? "COP " + e.dayCop.toFixed(1) + " · " : "") +
+    (anyHeat ? "heat " + e.slots.reduce((a, x) => a + x.heat, 0).toFixed(1) + " kWh" : "") +
+    (anyElec ? " · electricity " + e.slots.reduce((a, x) => a + (x.elec || 0), 0).toFixed(1) + " kWh" : "");
+  if (!anyHeat && !anyElec) { box.innerHTML = '<div class="empty">No energy data for this day.</div>'; return; }
+  const W = box.clientWidth, narrow = W < 520;
+  const H = narrow ? 190 : 220, m = { l: 30, r: narrow ? 26 : 84, t: 22, b: 24 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const maxV = Math.max(0.5, ...e.slots.map(x => Math.max(x.heat, x.elec || 0)));
+  const ticks = niceTicks(0, maxV, 4), y1 = ticks[ticks.length - 1];
+  const x = t => m.l + (t / 1440) * pw, y = v => m.t + ph - (v / y1) * ph;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Heat produced and electricity used per 2 hours in kWh, with COP" }, box);
+  for (const v of ticks) {
+    el("line", { x1: m.l, x2: m.l + pw, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    const t = el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg); t.textContent = v;
+  }
+  const slotW = pw / 12, gap = 2, bw = Math.max(2, (slotW - 8 - gap) / 2);
+  const bar = (bx, v, fill) => {
+    if (!(v > 0)) return null;
+    const by = y(v), bh = m.t + ph - by, rr = Math.min(4, bw / 2, bh);
+    return el("path", { d: `M${bx},${m.t + ph}V${by + rr}Q${bx},${by} ${bx + rr},${by}H${bx + bw - rr}Q${bx + bw},${by} ${bx + bw},${by + rr}V${m.t + ph}Z`, fill }, svg);
+  };
+  e.slots.forEach((sl, i) => {
+    const gx = m.l + i * slotW + (slotW - (2 * bw + gap)) / 2;
+    const b1 = bar(gx, sl.heat, "var(--c-heat)"), b2 = bar(gx + bw + gap, sl.elec, "var(--c-elec)");
+    if (sl.cop !== null) {
+      const top = y(Math.max(sl.heat, sl.elec || 0));
+      const t = el("text", { x: gx + bw + gap / 2, y: top - 5, "text-anchor": "middle", class: "lbl" }, svg);
+      t.textContent = sl.cop.toFixed(1);
+    }
+    const hit = el("rect", { x: m.l + i * slotW, y: m.t - 18, width: slotW, height: ph + 18, fill: "transparent" }, svg);
+    const range = hhmm(sl.start) + "–" + (sl.start + 120 === 1440 ? "24:00" : hhmm(sl.start + 120));
+    const tip = '<div class="t">' + range + "</div>" +
+      '<div class="r"><span><b style="background:var(--c-heat)"></b>Heat</span>' + sl.heat.toFixed(2) + " kWh</div>" +
+      '<div class="r"><span><b style="background:var(--c-elec)"></b>Electricity</span>' + (sl.elec === null ? "–" : sl.elec.toFixed(2) + " kWh") + "</div>" +
+      '<div class="r"><span>COP</span>' + (sl.cop === null ? "–" : sl.cop.toFixed(1)) + "</div>" +
+      (sl.elec !== null && !sl.complete ? '<div class="r"><span>only ' + Math.round(sl.covered / 1.2) + " % of this block measured</span></div>" : "") +
+      (sl.elec === null ? '<div class="r"><span>electricity not published yet</span></div>' : "");
+    const show = ev => { [b1, b2].forEach(b => b && b.setAttribute("opacity", .8)); showTip(ev, tip); };
+    hit.addEventListener("pointermove", show);
+    hit.addEventListener("pointerdown", show);
+    hit.addEventListener("pointerleave", ev => { [b1, b2].forEach(b => b && b.removeAttribute("opacity")); if (ev.pointerType !== "touch") $("tip").hidden = true; });
+  });
+  el("line", { x1: m.l, x2: m.l + pw, y1: m.t + ph, y2: m.t + ph, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  xAxis(svg, x, m.t + ph);
+  if (!narrow) { const u = el("text", { x: m.l + pw + 6, y: m.t + 10 }, svg); u.textContent = "kWh"; }
+}
+
+function showTip(ev, html) {
+  const tip = $("tip");
+  tip.innerHTML = html; tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = ev.clientX + 14, top = ev.clientY + 14;
+  if (left + w > window.innerWidth - 8) left = ev.clientX - w - 14;
+  if (top + h > window.innerHeight - 8) top = ev.clientY - h - 14;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+
+function renderTable() {
+  $("count").textContent = rows.length;
+  const cols = [
+    ["Time", r => r.timestamp.slice(11, 16)],
+    ["Heat pump", r => num(r.hp_on) === 1 ? "On" : num(r.hp_on) === 0 ? "Off" : "–"],
+    ["Outdoor °C", r => fmt(num(r.outdoor_temp_c))],
+    ["Indoor °C", r => fmt(num(r.indoor_temp_c))],
+    ["Hot water °C", r => fmt(num(r.hot_water_temp_c))],
+    ["Flow °C", r => fmt(num(r.flow_temp_c))],
+    ["Flow set °C", r => fmt(num(r.flow_setpoint_c))],
+    ["Return °C", r => fmt(num(r.return_temp_c))],
+    ["Evaporator °C", r => fmt(num(r.evaporator_temp_c))],
+    ["Suction gas °C", r => fmt(num(r.suction_gas_temp_c))],
+    ["Hot gas °C", r => fmt(num(r.hot_gas_temp_c))],
+    ["Liquid °C", r => fmt(num(r.liquid_temp_c))],
+    ["Compressor %", r => fmt(num(r.compressor_modulation_pct), 0)],
+    ["Flow l/min", r => fmt(num(r.flow_rate_l_min))],
+    ["Heat kW", r => fmt(num(r.heat_output_kw), 2)],
+    ["Heat kWh", r => fmt(num(r.heat_kwh_interval), 3)],
+    ["Day kWh", r => fmt(num(r.heat_kwh_today), 2)],
+  ];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  $("table").innerHTML = "<thead><tr>" + cols.map(c => "<th>" + c[0] + "</th>").join("") + "</tr></thead><tbody>" +
+    rows.slice().reverse().map(r => "<tr>" + cols.map(c => "<td>" + esc(c[1](r)) + "</td>").join("") + "</tr>").join("") + "</tbody>";
+}
+
+document.addEventListener("pointerdown", e => { if (!e.target.closest(".chart")) $("tip").hidden = true; });
+window.addEventListener("scroll", () => { $("tip").hidden = true; }, { passive: true });
+load();
+</script>
+</body>
+</html>
