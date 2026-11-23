@@ -72,6 +72,10 @@
   .now { display: grid; gap: 12px; }
   .now-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
   .now-head .big { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .now-head button.big { font: inherit; font-size: 26px; font-weight: 600; color: inherit; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 6px; margin: 0 -6px; cursor: pointer; }
+  .now-head button.big:hover, .now-head button.big.sel { background: var(--grid); }
+  .now-head button.big.sel { border-color: var(--axis); }
+  #nowChart:not(:empty) { margin-top: 14px; }
   .now-head .big small { font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 3px; }
   .now-head .when { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
   .now-head .warn { color: var(--text-muted); font-size: 12px; }
@@ -96,9 +100,9 @@
   .cycle .pick:hover rect { fill: var(--grid); }
   .cycle .pick.sel rect { fill: var(--grid); stroke: var(--axis); }
   .cycle .hint { color: var(--text-muted); text-align: center; padding: 24px 0; }
-  .cycle .sub-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 4px; }
-  .cycle .sub-head .meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-  .cycle .sub-head button { margin-left: auto; font: inherit; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
+  .sub-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 4px; }
+  .sub-head .meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .sub-head button { margin-left: auto; font: inherit; color: var(--text-secondary); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 2px 9px; cursor: pointer; }
   .cycle .pipe { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
   .cycle .hot { stroke: var(--c-flow-on); }
   .cycle .cold { stroke: var(--c-flow-off); }
@@ -222,7 +226,8 @@ const CYCLE_POINTS = {
   hot_gas_temp_c: "Hot gas", liquid_temp_c: "Liquid", flow_temp_c: "Flow", return_temp_c: "Return",
   compressor_modulation_pct: "Compressor",
 };
-const unitOf = key => key.endsWith("_pct") ? "%" : "°C";
+const unitOf = key => key.endsWith("_pct") ? "%" : key.endsWith("_kw") ? "kW" : "°C";
+let nowSel = false;    // heat output curve opened from the kW at the top
 
 // ---------- data ----------
 function num(v) { if (v === undefined || v === null || v === "") return null; const n = Number(v); return Number.isFinite(n) ? n : null; }
@@ -345,22 +350,30 @@ function selectCycle(key) {
 function renderCycleChart() {
   const box = $("cycleChart"); box.innerHTML = "";
   if (!cycleSel) { box.innerHTML = '<div class="hint">Click a value in the diagram to see its curve for the day.</div>'; return; }
-  const key = cycleSel, name = CYCLE_POINTS[key], unit = unitOf(key), s = { key, byState: true };
+  renderDetailChart(box, cycleSel, CYCLE_POINTS[cycleSel] + (unitOf(cycleSel) === "%" ? " speed" : ""), () => selectCycle(null));
+}
+
+// One value over the day: red while the heat pump runs, blue while it is off; crosshair tooltip.
+function renderDetailChart(box, key, name, onClose) {
+  const unit = unitOf(key), s = { key, byState: true };
+  const dec = unit === "%" ? 0 : 1, tipDec = unit === "kW" ? 2 : dec;
   const pts = rows.filter(r => num(r[key]) !== null);
   const vals = pts.map(r => num(r[key]));
   const head = document.createElement("div"); head.className = "sub-head";
-  head.innerHTML = "<h2>" + name + (unit === "%" ? " speed %" : " °C") + "</h2>" +
+  head.innerHTML = "<h2>" + name + " " + unit + "</h2>" +
     '<div class="legend"><span><b style="background:' + FLOW_ON + '"></b>heat pump on</span><span><b style="background:' + FLOW_OFF + '"></b>heat pump off</span></div>' +
-    (vals.length ? '<span class="meta">' + Math.min(...vals).toFixed(unit === "%" ? 0 : 1) + " – " + Math.max(...vals).toFixed(unit === "%" ? 0 : 1) + " " + unit + "</span>" : "") +
+    (vals.length ? '<span class="meta">' + Math.min(...vals).toFixed(dec) + " – " + Math.max(...vals).toFixed(dec) + " " + unit + "</span>" : "") +
     '<button type="button" aria-label="Close">×</button>';
-  head.querySelector("button").onclick = () => selectCycle(null);
+  head.querySelector("button").onclick = onClose;
   box.appendChild(head);
   const cbox = document.createElement("div"); cbox.className = "chart"; box.appendChild(cbox);
   if (!pts.length) { cbox.innerHTML = '<div class="empty">No ' + name.toLowerCase() + " readings for this day.</div>"; return; }
   const W = cbox.clientWidth, narrow = W < 520;
   const H = narrow ? 200 : 260, m = { l: 34, r: 12, t: 10, b: 24 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const ticks = unit === "%" ? [0, 25, 50, 75, 100] : niceTicks(Math.min(...vals), Math.max(...vals), 5);
+  const ticks = unit === "%" ? [0, 25, 50, 75, 100]
+    : unit === "kW" ? niceTicks(Math.min(0, ...vals), Math.max(...vals), 5)   // keep 0 in view (defrost goes negative)
+    : niceTicks(Math.min(...vals), Math.max(...vals), 5);
   const y0 = ticks[0], y1 = ticks[ticks.length - 1];
   const x = t => m.l + (t / 1440) * pw, y = v => m.t + ph - ((v - y0) / ((y1 - y0) || 1)) * ph;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": name + " over the day" }, cbox);
@@ -402,7 +415,7 @@ function renderCycleChart() {
     cross.setAttribute("x1", x(best.t)); cross.setAttribute("x2", x(best.t)); cross.setAttribute("visibility", "visible");
     dot.setAttribute("cx", x(best.t)); dot.setAttribute("cy", y(v)); dot.setAttribute("fill", colorAt(s, best)); dot.setAttribute("visibility", "visible");
     showTip(ev, '<div class="t">' + best.timestamp.slice(11, 16) + " · heat pump " + (num(best.hp_on) === 1 ? "on" : "off") + "</div>" +
-      '<div class="r"><span><b style="background:' + colorAt(s, best) + '"></b>' + name + "</span>" + v.toFixed(unit === "%" ? 0 : 1) + " " + unit + "</div>");
+      '<div class="r"><span><b style="background:' + colorAt(s, best) + '"></b>' + name + "</span>" + v.toFixed(tipDec) + " " + unit + "</div>");
   };
   hit.addEventListener("pointermove", onMove);
   hit.addEventListener("pointerdown", onMove);
@@ -458,7 +471,7 @@ function renderNow() {
   box.innerHTML =
     '<div class="now-head">' +
       (hp === null ? '<span class="state">–</span>' : '<span class="state ' + (on ? "on" : "") + '"><i></i>' + (on ? "On" : "Off") + "</span>") +
-      '<span class="big">' + fmt(kw, 1) + (kw !== null ? "<small>kW</small>" : "") + "</span>" +
+      '<button type="button" class="big' + (nowSel ? " sel" : "") + '" id="kwBtn" aria-label="Show heat output over the day">' + fmt(kw, 1) + (kw !== null ? "<small>kW</small>" : "") + "</button>" +
       '<span class="when">at ' + r.timestamp.slice(11, 16) + "</span>" +
       (stale ? '<span class="warn">no new data for a while</span>' : "") +
       (e.dayCop !== null ? '<span class="cop">COP ' + (isToday ? "today" : "that day") + " <b>" + e.dayCop.toFixed(1) + "</b></span>" : "") +
@@ -473,11 +486,27 @@ function renderNow() {
       kv("Heat " + (isToday ? "today" : "that day"), fmt(kwh, 1), "kWh") +
       kv("Electricity " + (isToday ? "today" : "that day"), power.length ? fmt(power.reduce((a, p) => a + p.kwh, 0), 1) : "–", "kWh",
          e.nDone ? "COP from " + e.nDone + " complete 2 h blocks" : "") +
-    "</dl>";
+    "</dl>" +
+    '<div id="nowChart"></div>';
+  $("kwBtn").onclick = () => selectNow(!nowSel);
+  renderNowChart();
+}
+
+function selectNow(open) {
+  nowSel = open;
+  const b = $("kwBtn"); if (b) b.classList.toggle("sel", open);
+  renderNowChart();
+}
+
+// heat output over the day, opened by clicking the kW at the top
+function renderNowChart() {
+  const box = $("nowChart"); if (!box) return;
+  box.innerHTML = "";
+  if (nowSel) renderDetailChart(box, "heat_output_kw", "Heat output", () => selectNow(false));
 }
 
 function renderCharts() {
-  renderLegend(); renderTempChart(); renderCycleChart(); renderKwhChart();
+  renderLegend(); renderTempChart(); renderNowChart(); renderCycleChart(); renderKwhChart();
 }
 
 function renderLegend() {
