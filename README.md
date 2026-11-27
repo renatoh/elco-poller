@@ -56,6 +56,7 @@ Requires Java 17+. Rebuild with `mvn package` (jar lands in `target/elco-poller.
 | `hot_gas_temp_c` | BSB 8415, hot gas (leaving compressor) | °C |
 | `liquid_temp_c` | BSB 8420, refrigerant liquid (after condenser) | °C |
 | `compressor_modulation_pct` | BSB 8413, compressor speed (modulation) | % |
+| `dhw_valve` | BSB 8820, hot water valve Q3: 1 = hot water, 0 = heating | |
 | `flow_rate_l_min` | BSB 8460, heat pump water flow | l/min |
 | `heat_output_kw` | BSB 8395, heat output reported by the controller | kW |
 | `heat_kwh_interval` | heat since the previous poll: average kW × time | kWh |

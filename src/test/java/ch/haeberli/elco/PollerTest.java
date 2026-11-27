@@ -36,6 +36,7 @@ class PollerTest {
             values.put(5834175L, 67.6);
             values.put(5834184L, 24.6);
             values.put(331050L, 100.0);
+            values.put(330147L, 1.0);
         }
         long rejectAddress = -1;
 
@@ -93,12 +94,12 @@ class PollerTest {
         Poller poller = new Poller(cfg(dir), api, Points.loadBsb(), Z);
         assertEquals(List.of("timestamp", "hp_on", "outdoor_temp_c", "indoor_temp_c", "hot_water_temp_c",
                 "flow_temp_c", "flow_setpoint_c", "return_temp_c", "evaporator_temp_c",
-                "suction_gas_temp_c", "hot_gas_temp_c", "liquid_temp_c", "compressor_modulation_pct", "flow_rate_l_min", "heat_output_kw",
+                "suction_gas_temp_c", "hot_gas_temp_c", "liquid_temp_c", "compressor_modulation_pct", "dhw_valve", "flow_rate_l_min", "heat_output_kw",
                 "heat_kwh_interval", "heat_kwh_today", "poll_problems"), poller.columns());
 
         Instant t0 = Instant.parse("2026-11-16T19:00:00Z");
         assertTrue(poller.pollAndWrite(t0));
-        assertEquals(1, api.calls.size(), "all 14 points in one request");
+        assertEquals(1, api.calls.size(), "all 15 points in one request");
         api.values.put(334296L, 8.0);
         poller.pollAndWrite(t0.plusSeconds(1800 / 2)); // 15 min later, 6 → 8 kW → avg 7 kW × 0.25 h
         api.values.put(330165L, 0.0);
@@ -120,6 +121,7 @@ class PollerTest {
         assertEquals("67.6", r1.get("hot_gas_temp_c"));
         assertEquals("24.6", r1.get("liquid_temp_c"));
         assertEquals("100", r1.get("compressor_modulation_pct"));
+        assertEquals("1", r1.get("dhw_valve"));
         assertEquals("20.7", r1.get("flow_rate_l_min"));
         assertEquals("6", r1.get("heat_output_kw"));
         assertEquals("0", r1.get("heat_kwh_interval"));
