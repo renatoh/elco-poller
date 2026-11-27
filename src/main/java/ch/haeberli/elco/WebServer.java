@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
 /**
  * Small dashboard served from the same JVM (JDK built-in HTTP server, no dependencies).
  * GET /                      → dashboard page
- * GET /api/day?date=YYYY-MM-DD → that day's readings + 2h electricity slices (default: today)
+ * GET /api/day?date=YYYY-MM-DD → that day's readings, 2h electricity slices and defrost starts (default: today)
  * GET /api/days              → dates that have data
  */
 final class WebServer {
@@ -91,6 +91,11 @@ final class WebServer {
         out.put("today", today().toString());
         out.put("rows", rows);
         out.put("power", store.power(d));
+        // defrosts of the previous day too, so "since last defrost" and the cycle length work across midnight
+        List<Map<String, String>> both = new java.util.ArrayList<>(store.rows(d.minusDays(1)));
+        both.addAll(rows);
+        out.put("defrosts", Defrosts.starts(both));
+        out.put("defrostThresholdKw", Defrosts.THRESHOLD_KW);
         sendJson(ex, out);
     }
 
