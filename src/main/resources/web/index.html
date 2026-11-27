@@ -114,6 +114,9 @@
   .plant .blade { fill: var(--axis); }
   .plant .hub { fill: var(--text-secondary); }
   .plant .ground { stroke: var(--axis); stroke-width: 1.5; }
+  .plant .idle { stroke: var(--axis); }
+  .plant .valve { fill: var(--surface-1); }
+  .plant .shut { fill: var(--axis); }
   .plant .tank { fill: var(--surface-1); stroke: var(--text-secondary); stroke-width: 1.5; }
   .plant .coil { stroke: var(--c-flow-on); stroke-width: 1.5; fill: none; opacity: .6; }
   .plant .arrow { stroke: var(--axis); stroke-width: 1.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -135,6 +138,8 @@
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
   .card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 8px; }
   .card-head .meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .ranges { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: -2px 0 8px; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .ranges b { font-weight: 600; color: var(--text-primary); }
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-secondary); font-size: 12px; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend b { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
@@ -187,6 +192,7 @@
       <h2>Temperatures °C</h2>
       <div class="legend" id="legend"></div>
     </div>
+    <div class="ranges" id="ranges"></div>
     <div id="tempChart" class="chart"></div>
   </section>
 
@@ -290,7 +296,7 @@ function latestRow() {
 }
 
 // ---------- plant section: tiles over the house, refrigerant cycle, water side ----------
-// Drawing in a 680 x 392 box: house with hot water tank on the left, outdoor unit on the right.
+// Drawing in a 680 x 392 box: house with heating loop, valve and hot water tank on the left, outdoor unit on the right.
 // Pipes are red (hot / high pressure) and blue (cold / low pressure) and animated while the heat pump runs;
 // grey and still while it is off. During a defrost the refrigerant flow runs backwards and the fan stops.
 
@@ -309,6 +315,26 @@ function defrostInfo(latest) {
   else if (last && isToday) { since = String(Math.max(0, Math.round((Date.now() - tsMs(last)) / 60000))); sinceUnit = "min ago"; }
   else if (last) { since = last.slice(11, 16) + (last.slice(0, 10) !== shownDate ? " (day before)" : ""); }
   return { since, sinceUnit, cycle };
+}
+
+// Water side in the house. dhw = valve on hot water (Q3 on); otherwise the flow goes through the heating loop.
+// The branch in use is coloured and animated, the closed one grey.
+function water(dhw) {
+  const seg = (cls, d, active) => '<path class="pipe ' + cls + (active ? "" : " idle") + '" d="' + d + '"/>' + (active ? '<path class="mv" d="' + d + '"/>' : "");
+  const heat = !dhw;
+  return seg("hot", "M336 240 H164", true) +                                   // flow into the house up to the valve
+    seg("hot", "M140 240 H34 V346", heat) +                                     // heating: under the ceiling, down the wall
+    seg("cold", "M34 346 V372 L52 364 L70 372 L88 364 L106 372 V374 H194 V352", heat) + // floor loop back to the riser
+    seg("hot", "M152 250 V282", dhw) +                                          // hot water: down into the tank
+    seg("cold", "M182 352 H194", dhw) +                                         // out of the tank coil
+    seg("cold", "M194 352 V286 H336", true);                                    // common return to the outdoor unit
+}
+
+// 3-way valve; the closed port is filled grey
+function valve(dhw) {
+  return '<path class="line valve" d="M140 232 L164 248 L164 232 L140 248 Z"/>' +
+    '<path class="line valve" d="M144 256 L160 256 L152 242 Z"/>' +
+    (dhw ? '<path class="shut" d="M140 232 L152 240 L140 248 Z"/>' : '<path class="shut" d="M144 256 L160 256 L152 242 Z"/>');
 }
 
 function renderPlant() {
@@ -351,6 +377,7 @@ function renderPlant() {
       '<text x="' + x + '" y="' + y + '" text-anchor="' + anchor + '">' + (name ? '<tspan class="nm">' + name + "</tspan>" : "") + vt + "</text></g>";
   };
   const setp = r ? num(r.flow_setpoint_c) : null;
+  const dhw = r ? num(r.dhw_valve) === 1 : false;
   let fins = "";
   for (let y = 132; y <= 276; y += 12) fins += "M544 " + y + " H568 ";
   let zig = "350,124";
@@ -364,7 +391,7 @@ function renderPlant() {
     // outdoor unit
     '<rect class="casing" x="304" y="56" width="360" height="304" rx="16"/>' +
     '<text class="sm" x="646" y="80" text-anchor="end">Outdoor unit</text>' +
-    '<path class="ins" d="M186 240 H304 M186 286 H304"/>' +
+    '<path class="ins" d="M200 240 H304 M200 286 H304"/>' +
     // refrigerant (reverses during defrost) and water pipes
     '<g class="rev">' +
       '<path class="pipe cold" d="M556 120 V100 H443"/><path class="pipe hot" d="M405 100 H350 V120"/>' +
@@ -372,8 +399,8 @@ function renderPlant() {
       '<path class="mv" d="M556 120 V100 H443"/><path class="mv" d="M405 100 H350 V120"/>' +
       '<path class="mv" d="M350 290 V320 H428"/><path class="mv" d="M452 320 H556 V290"/>' +
     "</g>" +
-    '<path class="pipe hot" d="M336 240 H62 V282"/><path class="pipe cold" d="M102 352 H126 V286 H336"/>' +
-    '<path class="mv" d="M336 240 H62 V282"/><path class="mv" d="M102 352 H126 V286 H336"/>' +
+    // water side: valve sends the flow either through the house (heating) or through the tank (hot water)
+    water(dhw) +
     // air through the coil, fan behind the evaporator
     '<path class="arrow air" d="M650 134 H578 M650 278 H578"/><path class="arrow" d="M584 129 L577 134 L584 139 M584 273 L577 278 L584 283"/>' +
     '<circle class="line" cx="506" cy="205" r="32" style="stroke:var(--axis)"/>' +
@@ -384,11 +411,12 @@ function renderPlant() {
     '<path class="line" d="M452 310 L428 330 L428 310 L452 330 Z"/>' +
     '<text class="sm" x="440" y="300" text-anchor="middle">Expansion valve</text>' +
     // house with hot water tank
-    '<rect class="line" x="16" y="226" width="170" height="158"/>' +
-    '<path class="line" style="stroke-width:3;stroke-linecap:round;stroke-linejoin:round" d="M200 232 L101 162 L2 232"/>' +
-    '<path class="tank" d="M22 290 V362 A40 8 0 0 0 102 362 V290"/><ellipse class="tank" cx="62" cy="290" rx="40" ry="8"/>' +
-    '<polyline class="coil" points="40,344 84,348 40,352 84,356 40,360"/>' +
-    (setp !== null ? '<text class="sm" x="245" y="178" text-anchor="middle">set ' + setp.toFixed(1) + " °C</text>" : "") +
+    '<rect class="line" x="16" y="226" width="184" height="158"/>' +
+    '<path class="line" style="stroke-width:3;stroke-linecap:round;stroke-linejoin:round" d="M214 232 L108 162 L2 232"/>' +
+    '<path class="tank" d="M122 290 V362 A30 7 0 0 0 182 362 V290"/><ellipse class="tank" cx="152" cy="290" rx="30" ry="7"/>' +
+    '<polyline class="coil" points="134,346 170,350 134,354 170,358 134,362"/>' +
+    valve(dhw) +
+    (setp !== null ? '<text class="sm" x="252" y="178" text-anchor="middle">set ' + setp.toFixed(1) + " °C</text>" : "") +
     // values
     pick("suction_gas_temp_c", 500, 72, "middle") +
     pick("hot_gas_temp_c", 358, 72, "middle") +
@@ -396,12 +424,12 @@ function renderPlant() {
     pick("evaporator_temp_c", 576, 172, "start") +
     pick("outdoor_temp_c", 576, 224, "start") +
     pick("liquid_temp_c", 382, 334, "middle") +
-    pick("outdoor_temp_c", 245, 124, "middle") +
-    pick("flow_temp_c", 245, 194, "middle") +
-    pick("flow_rate_l_min", 245, 270, "middle", { name: "" }) +
-    pick("return_temp_c", 245, 304, "middle") +
-    pick("indoor_temp_c", 101, 216, "middle", { name: "", big: true }) +
-    pick("hot_water_temp_c", 62, 328, "middle", { name: "" }) +
+    pick("outdoor_temp_c", 252, 124, "middle") +
+    pick("flow_temp_c", 252, 194, "middle") +
+    pick("flow_rate_l_min", 252, 270, "middle", { name: "" }) +
+    pick("return_temp_c", 252, 304, "middle") +
+    pick("indoor_temp_c", 108, 216, "middle", { name: "", big: true }) +
+    pick("hot_water_temp_c", 152, 328, "middle", { name: "" }) +
     "</svg>";
 
   // hit areas behind the clickable values, sized to the text
@@ -525,7 +553,30 @@ function renderCharts() {
   renderLegend(); renderTempChart(); renderPlantChart(); renderKwhChart();
 }
 
+// lowest and highest value of a column (optionally only rows from minute tFrom on)
+function range(key, tFrom = -1) {
+  let lo = null, hi = null;
+  for (const r of rows) {
+    if (r.t < tFrom) continue;
+    const v = num(r[key]); if (v === null) continue;
+    lo = lo === null ? v : Math.min(lo, v); hi = hi === null ? v : Math.max(hi, v);
+  }
+  return lo === null ? null : [lo, hi];
+}
+
+// min–max of the day for outdoor, indoor and hot water; flow over the last hour of readings
+function renderRanges() {
+  const last = rows.length ? latestRow() : null;
+  const item = (label, rg) => rg ? "<span>" + label + " <b>" + rg[0].toFixed(1) + " – " + rg[1].toFixed(1) + "</b></span>" : "";
+  $("ranges").innerHTML =
+    item("Outdoor", range("outdoor_temp_c")) +
+    item("Indoor", range("indoor_temp_c")) +
+    item("Hot water", range("hot_water_temp_c")) +
+    item("Flow last hour", last ? range("flow_temp_c", last.t - 60) : null);
+}
+
 function renderLegend() {
+  renderRanges();
   $("legend").innerHTML = SERIES.map(s => s.byState
       ? '<span><b style="background:' + FLOW_ON + '"></b>Flow, heat pump on</span><span><b style="background:' + FLOW_OFF + '"></b>Flow, heat pump off</span>'
       : '<span><b style="background:' + s.color + '"></b>' + s.label + "</span>").join("") ;
@@ -721,6 +772,7 @@ function renderTable() {
     ["Hot gas °C", r => fmt(num(r.hot_gas_temp_c))],
     ["Liquid °C", r => fmt(num(r.liquid_temp_c))],
     ["Compressor %", r => fmt(num(r.compressor_modulation_pct), 0)],
+    ["Valve", r => num(r.dhw_valve) === null ? "–" : num(r.dhw_valve) === 1 ? "hot water" : "heating"],
     ["Flow l/min", r => fmt(num(r.flow_rate_l_min))],
     ["Heat kW", r => fmt(num(r.heat_output_kw), 2)],
     ["Heat kWh", r => fmt(num(r.heat_kwh_interval), 3)],
